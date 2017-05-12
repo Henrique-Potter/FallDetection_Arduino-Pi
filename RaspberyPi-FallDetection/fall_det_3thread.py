@@ -14,11 +14,7 @@ GPIO.setup(20, GPIO.OUT)
 readyContour = Queue.Queue()
 ggframes = Queue.Queue()
 
-def convertFrame (frame):
-  r = 750.0 / frame.shape[1]
-  dim = (750, int(frame.shape[0] * r))
-  frame = cv2.resize(frame, dim, interpolation = cv2.INTER_AREA)
-  return frame
+
 
 def applyGaussian(frame,ggframes):
   gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -26,12 +22,18 @@ def applyGaussian(frame,ggframes):
     gray = cv2.GaussianBlur(gray, (gaussianPixels, gaussianPixels), 0)
   ggframes.put(gray)
 
-def calculateFrameDiff(firstFrame,gray,readyContour):
+def getFrameDif(firstFrame,gray,readyContour):
   frameDelta = cv2.absdiff(firstFrame, gray)
   thresh = cv2.threshold(frameDelta, thresholdLimit, 255, cv2.THRESH_BINARY)[1]
   thresh = cv2.dilate(thresh, None, iterations=dilationPixels) # dilate thresh
   _, contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) #find contours
   readyContour.put(contours)
+  
+def convertFrame (frame):
+  r = 750.0 / frame.shape[1]
+  dim = (750, int(frame.shape[0] * r))
+  frame = cv2.resize(frame, dim, interpolation = cv2.INTER_AREA)
+  return frame
 
 # Video or camera
 camera = PiCamera()
@@ -49,7 +51,7 @@ lastH = [0]*100
 lastW = [0]*100
 boxPosition = [0]*100
 
-# Detect parameters
+# Global params
 widthRatio = 1.40
 minArea = 40*40
 thresholdLimit = 20
@@ -64,7 +66,7 @@ redBox = (0,0,255)
 greenBox = (124,252,0)
 boxColor=redBox
 
-# loop for each frame in video
+# looping trought each frame in video stream
 for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
   
   detectStatus = "Empty"
@@ -77,10 +79,12 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
       gray = cv2.GaussianBlur(gray, (gaussianPixels, gaussianPixels), 0)
     firstTime=False
   
+  #Starting a thread to calculate gaussian application
   gthread = Thread(target = applyGaussian,args = (frame,ggframes))
   if gthread.isAlive()==False:
     gthread.start()
-    
+  
+  #Get result if avaliable
   if ggframes.empty()==False:
     gray=ggframes.get_nowait()
 
@@ -91,7 +95,8 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     firstFrame = gray
     continue
 
-  thread = Thread(target = calculateFrameDiff, args = (firstFrame,gray,readyContour))
+  #Thread responsible to calculate frame by frame difference
+  thread = Thread(target = getFrameDif, args = (firstFrame,gray,readyContour))
   if thread.isAlive()==False:
     thread.start()
   
@@ -105,7 +110,7 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     if cv2.contourArea(contour) < minArea:
       continue
 
-    #Drawing rect over contour
+    #Drawing rectangle over contour
     (x, y, w, h) = cv2.boundingRect(contour)
     cv2.rectangle(frame, (x, y), (x + w, y + h), boxColor, 2)
     boxPosition[i] = x+y
@@ -121,8 +126,6 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
       boxColor = greenBox
 
 
-    
-    
     lastW[i] = w
     lastH[i] = h
     #cv2.putText(frame,"{}".format(cv2.contourArea(contour)), (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 1)
@@ -137,12 +140,8 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     seconds = end - start
     fps  = round((1 / seconds), 1)
     start = time.time()
-
     cv2.putText(frame, "Detect: {}".format(detectStatus), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 140, 255), 1)
     cv2.putText(frame, "FPS: {}".format(fps), (400, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 140, 255), 1)
-    #cv2.imshow("frameDelta", frameDelta)
-    #cv2.imshow("Thresh", thresh)
-    #cv2.imshow("firstFrame", firstFrame)
 
   cv2.imshow("Feed", frame)
   
@@ -157,7 +156,7 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     firstFrame = None
   
     
-# Release and destroy
+# Release resources
 GPIO.cleanup()
 camera.release()
 cv2.destroyAllWindows()

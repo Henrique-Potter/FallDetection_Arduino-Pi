@@ -20,7 +20,7 @@ def convertFrame (frame):
   return frame, gray
 
 
-# Video or camera
+# Starting the Pi Camera
 camera = PiCamera()
 camera.vflip = True
 camera.resolution = (1024, 860)
