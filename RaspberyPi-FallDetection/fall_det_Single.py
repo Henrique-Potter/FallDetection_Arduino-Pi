@@ -64,7 +64,7 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
   frameDelta = cv2.absdiff(firstFrame, gray)
   thresh = cv2.threshold(frameDelta, thresholdLimit, 255, cv2.THRESH_BINARY)[1]
   thresh = cv2.dilate(thresh, None, iterations=dilationPixels) # dilate thresh
-  _, contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) #find contours
+  contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) #find contours
  
   for contour in contours:
     if cv2.contourArea(contour) < minArea:
@@ -76,7 +76,7 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     
     if w > lastW[i]*1.40:
       GPIO.output(20,True)
-      print "Alarm: " + format(time.time())
+      print("Alarm: {}".format(time.time()))
     else:
       GPIO.output(20,False)
 
